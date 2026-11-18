@@ -44,8 +44,12 @@ resource "google_secret_manager_secret" "demo" {
 }
 
 resource "google_secret_manager_secret_version" "demo" {
-  secret      = google_secret_manager_secret.demo.id
-  secret_data = "demo-secret-from-terraform"
+  secret = google_secret_manager_secret.demo.id
+
+  # Write-only: the value is sent to GCP but never stored in Terraform state.
+  # Bump the version to push a new value.
+  secret_data_wo         = var.demo_secret
+  secret_data_wo_version = 1
 }
 
 resource "google_secret_manager_secret_iam_member" "runtime" {
@@ -55,9 +59,10 @@ resource "google_secret_manager_secret_iam_member" "runtime" {
 }
 
 resource "google_cloud_run_v2_service" "app" {
-  name     = var.service_name
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
+  name                = var.service_name
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = false
 
   template {
     service_account = google_service_account.runtime.email
@@ -118,9 +123,19 @@ resource "google_cloud_run_v2_service" "app" {
     }
   }
 
+  # GitHub Actions deploys new images with gcloud; don't roll them back on apply.
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
   depends_on = [
     google_project_service.required,
     google_secret_manager_secret_iam_member.runtime,
+    google_secret_manager_secret_version.demo,
   ]
 }
 
@@ -186,5 +201,5 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account_iam_member" "github_wif" {
   service_account_id = google_service_account.github_deploy.name
   role               = "roles/iam.workloadIdentityUser"
-  member = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
 }

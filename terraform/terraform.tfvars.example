@@ -1,5 +1,7 @@
-project_id       = "your-gcp-project-id"
-region           = "asia-south1"
+project_id        = "your-gcp-project-id"
+region            = "asia-south1"
 github_repository = "your-github-user/gcp-cloudrun-demo"
-github_ref       = "refs/heads/main"
-service_name     = "gcp-cloudrun-demo"
+github_ref        = "refs/heads/main"
+service_name      = "gcp-cloudrun-demo"
+
+# Don't put demo_secret here. Pass it with: export TF_VAR_demo_secret='...'

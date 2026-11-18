@@ -29,6 +29,12 @@ github_ref        = "refs/heads/main"
 service_name      = "gcp-cloudrun-demo"
 EOF
 
+if [[ -z "${TF_VAR_demo_secret:-}" ]]; then
+  read -r -s -p "Demo secret value (stored in Secret Manager): " TF_VAR_demo_secret
+  echo
+  export TF_VAR_demo_secret
+fi
+
 cd terraform
 terraform init
 terraform plan

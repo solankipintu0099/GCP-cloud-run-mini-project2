@@ -11,6 +11,9 @@ def index():
         status="healthy",
         service="gcp-cloudrun-demo",
         message="Hello from Cloud Run",
+        environment=os.environ.get("ENVIRONMENT", "local"),
+        # Only report whether the secret was injected; never return its value.
+        secret_configured=bool(os.environ.get("DEMO_SECRET")),
     )
 
 

@@ -10,7 +10,7 @@ GitHub Actions → OIDC Workload Identity Federation → GCP service account →
 
 - A GCP project with billing enabled
 - `gcloud` CLI
-- Terraform 1.5 or newer
+- Terraform 1.11 or newer (needed for the write-only secret value)
 - Docker
 - A GitHub repository
 
@@ -29,14 +29,19 @@ cd terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Update `terraform.tfvars`, then run:
+Update `terraform.tfvars`, then set the demo secret value and run Terraform. The value is sent to Secret Manager but never written to Terraform state or to git:
 
 ```bash
+export TF_VAR_demo_secret='choose-a-demo-value'
 terraform init
 terraform plan
 terraform apply
 terraform output
 ```
+
+Commit `terraform/.terraform.lock.hcl` after `terraform init` so everyone uses the same provider version.
+
+After the first deploy, GitHub Actions owns the container image. Terraform ignores image changes, so running `terraform apply` again won't roll the service back to the placeholder image.
 
 ## GitHub Actions configuration
 
@@ -60,7 +65,8 @@ The Terraform outputs provide the service account and workload identity provider
 cd app
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pytest -q
 python main.py
 ```
 
@@ -70,10 +76,11 @@ Open `http://localhost:8080/health`.
 
 Push to `main`. GitHub Actions will:
 
-1. Exchange a GitHub OIDC token for temporary GCP credentials.
-2. Build the Docker image.
-3. Push it to Artifact Registry.
-4. Deploy it to Cloud Run.
+1. Run the tests. If they fail, nothing is deployed.
+2. Exchange a GitHub OIDC token for temporary GCP credentials.
+3. Build the Docker image.
+4. Push it to Artifact Registry.
+5. Deploy it to Cloud Run.
 
 ## Important files
 

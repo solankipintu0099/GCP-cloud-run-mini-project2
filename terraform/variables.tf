@@ -27,7 +27,14 @@ variable "service_name" {
 }
 
 variable "image" {
-  description = "Container image URI deployed to Cloud Run"
+  description = "Initial container image for Cloud Run; later images are deployed by GitHub Actions"
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+variable "demo_secret" {
+  description = "Value stored in Secret Manager as the demo secret"
+  type        = string
+  sensitive   = true
+  ephemeral   = true
 }
