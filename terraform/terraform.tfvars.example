@@ -1,0 +1,5 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-south1"
+github_repository = "your-github-user/gcp-cloudrun-demo"
+github_ref       = "refs/heads/main"
+service_name     = "gcp-cloudrun-demo"
