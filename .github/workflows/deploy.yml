@@ -1,21 +1,32 @@
 name: Deploy to Cloud Run
 
+# Push to main deploys to dev. Staging and prod are deployed from the
+# Actions tab with "Run workflow"; give the prod GitHub Environment
+# required reviewers so every prod deploy needs an approval.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
-  group: cloud-run-demo
+  group: deploy-${{ inputs.environment || 'dev' }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +45,20 @@ jobs:
         run: |
           pip install -r requirements-dev.txt
           pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    # Secrets come from this GitHub Environment, and GCP only accepts
+    # tokens from the environment whose name matches the Terraform env.
+    environment: ${{ inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -55,11 +80,11 @@ jobs:
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
+      # Who can invoke the service is managed by Terraform, so no --allow-unauthenticated here.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "${{ vars.GCP_SERVICE_NAME }}" \
             --image "$IMAGE" \
             --region "${{ vars.GCP_REGION }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --service-account "cloudrun-demo-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --allow-unauthenticated
+            --service-account "cloudrun-demo-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"

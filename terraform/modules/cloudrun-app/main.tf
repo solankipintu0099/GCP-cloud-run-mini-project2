@@ -62,7 +62,7 @@ resource "google_cloud_run_v2_service" "app" {
   name                = var.service_name
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_ALL"
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   template {
     service_account = google_service_account.runtime.email
@@ -76,7 +76,7 @@ resource "google_cloud_run_v2_service" "app" {
 
       env {
         name  = "ENVIRONMENT"
-        value = "gcp-demo"
+        value = var.environment
       }
 
       env {
@@ -118,8 +118,21 @@ resource "google_cloud_run_v2_service" "app" {
     }
 
     scaling {
-      min_instance_count = 0
-      max_instance_count = 2
+      min_instance_count = var.min_instance_count
+      max_instance_count = var.max_instance_count
+    }
+
+    dynamic "vpc_access" {
+      for_each = var.vpc_subnetwork == null ? [] : [1]
+
+      content {
+        egress = var.vpc_egress
+
+        network_interfaces {
+          network    = var.vpc_network
+          subnetwork = var.vpc_subnetwork
+        }
+      }
     }
   }
 
@@ -140,6 +153,8 @@ resource "google_cloud_run_v2_service" "app" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "public" {
+  count = var.allow_public_access ? 1 : 0
+
   project  = google_cloud_run_v2_service.app.project
   location = google_cloud_run_v2_service.app.location
   name     = google_cloud_run_v2_service.app.name
@@ -160,9 +175,11 @@ resource "google_project_iam_member" "github_artifact_writer" {
   member  = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 
-resource "google_project_iam_member" "github_run_admin" {
+# run.developer can deploy but not change who may invoke the service;
+# public access is managed only by Terraform (allow_public_access).
+resource "google_project_iam_member" "github_run_developer" {
   project = var.project_id
-  role    = "roles/run.admin"
+  role    = "roles/run.developer"
   member  = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 
@@ -185,13 +202,20 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   display_name                       = "GitHub"
 
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.actor"      = "assertion.actor"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
+    "google.subject"        = "assertion.sub"
+    "attribute.actor"       = "assertion.actor"
+    "attribute.repository"  = "assertion.repository"
+    "attribute.ref"         = "assertion.ref"
+    "attribute.environment" = "assertion.environment"
   }
 
-  attribute_condition = "attribute.repository == '${var.github_repository}' && attribute.ref == '${var.github_ref}'"
+  # Only a job running in the matching GitHub Environment (e.g. "prod", which
+  # can require manual approval) gets credentials for this project.
+  attribute_condition = join(" && ", [
+    "attribute.repository == '${var.github_repository}'",
+    "attribute.ref == '${var.github_ref}'",
+    "attribute.environment == '${var.environment}'",
+  ])
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
